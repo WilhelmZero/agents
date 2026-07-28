@@ -1,0 +1,357 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>多通道批量生图</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="workspace" aria-label="图片配对画布">
+        <header class="topbar">
+          <div>
+            <h1>商品场景批量生图</h1>
+            <p>按下标配对场景图与 logo，同一提示词批量生成结果。</p>
+          </div>
+          <div class="status-pill" id="queueStatus">未开始</div>
+        </header>
+
+        <section class="upload-band">
+          <label class="upload-box">
+            <span class="upload-title">场景图</span>
+            <span class="upload-meta" id="sceneMeta">选择多张商品场景图片</span>
+            <input id="sceneInput" type="file" accept="image/*" multiple>
+          </label>
+          <label class="upload-box">
+            <span class="upload-title">Logo 图</span>
+            <span class="upload-meta" id="logoMeta">数量需与场景图一致</span>
+            <input id="logoInput" type="file" accept="image/*" multiple>
+          </label>
+        </section>
+
+        <section class="canvas-panel">
+          <div class="section-head">
+            <h2>配对画布</h2>
+            <div class="toolbar-row">
+              <div class="view-switch" aria-label="画布显示方式">
+                <button type="button" data-view-target="pairs" data-view-mode="large">大图</button>
+                <button class="is-active" type="button" data-view-target="pairs" data-view-mode="medium">中图</button>
+                <button type="button" data-view-target="pairs" data-view-mode="small">小图</button>
+                <button type="button" data-view-target="pairs" data-view-mode="list">列表</button>
+              </div>
+              <button class="ghost-button" id="addPairButton" type="button">新增一组</button>
+              <input id="addPairInput" class="visually-hidden" type="file" accept="image/*" multiple>
+              <button class="ghost-button" id="clearImagesButton" type="button">清空图片</button>
+            </div>
+          </div>
+          <div class="pair-grid" id="pairGrid" aria-live="polite"></div>
+          <div class="empty-state" id="pairEmpty">
+            上传场景图与 logo 后，这里会按 1、2、3 的顺序展示配对。
+          </div>
+        </section>
+
+        <section class="results-panel">
+          <div class="section-head">
+            <div>
+              <h2>生成结果</h2>
+              <p id="resultSummary">暂无结果</p>
+            </div>
+            <div class="result-actions">
+              <div class="view-switch" aria-label="结果显示方式">
+                <button type="button" data-view-target="results" data-view-mode="large">大图</button>
+                <button class="is-active" type="button" data-view-target="results" data-view-mode="medium">中图</button>
+                <button type="button" data-view-target="results" data-view-mode="small">小图</button>
+                <button type="button" data-view-target="results" data-view-mode="list">列表</button>
+              </div>
+              <label class="check-line">
+                <input id="selectAllResults" type="checkbox">
+                <span>全选</span>
+              </label>
+              <button class="ghost-button" id="downloadSelectedButton" type="button" disabled>下载所选 ZIP</button>
+              <button class="ghost-button" id="clearResultsButton" type="button" disabled>清空结果</button>
+            </div>
+          </div>
+          <div class="result-grid" id="resultGrid"></div>
+          <div class="empty-state" id="resultEmpty">生成完成后会在这里显示可下载图片。</div>
+        </section>
+      </section>
+
+      <aside class="control-panel" aria-label="生成配置">
+        <section class="panel-block">
+          <h2>通道密钥</h2>
+          <label class="field" id="quickRouterKeyField">
+            <span>QuickRouter API Key（生图 / 提示词优化）</span>
+            <input id="apiKeyInput" type="password" autocomplete="off" placeholder="sk-...">
+          </label>
+          <label class="field is-hidden" id="googleKeyField">
+            <span>Google Gemini API Key</span>
+            <input id="googleApiKeyInput" type="password" autocomplete="off" placeholder="AIza...">
+          </label>
+          <div class="inline-row">
+            <label class="check-line">
+              <input id="rememberKeyInput" type="checkbox">
+              <span>记住 Key</span>
+            </label>
+            <button class="text-button" id="clearKeyButton" type="button">清除</button>
+          </div>
+        </section>
+
+        <section class="panel-block">
+          <h2>模型</h2>
+          <div class="model-channel-row">
+            <div class="model-category">
+              <h3>中转站</h3>
+              <div class="segmented" role="radiogroup" aria-label="选择中转站模型">
+                <label>
+                  <input type="radio" name="model" value="gpt" checked>
+                  <span>GPT</span>
+                </label>
+                <label>
+                  <input type="radio" name="model" value="banana">
+                  <span>Banana</span>
+                </label>
+              </div>
+            </div>
+            <div class="model-category">
+              <h3>官方通道</h3>
+              <div class="segmented segmented-single" role="radiogroup" aria-label="选择官方模型">
+                <label>
+                  <input type="radio" name="model" value="officialBanana">
+                  <span>Banana</span>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <div class="model-panel" id="gptSettings">
+            <label class="field">
+              <span>模型</span>
+              <select id="gptModelInput">
+                <option value="gpt-image-2">gpt-image-2</option>
+                <option value="gpt-image-1.5">gpt-image-1.5</option>
+                <option value="gpt-image-1">gpt-image-1</option>
+              </select>
+            </label>
+            <div class="two-col">
+              <label class="field">
+                <span>生成张数</span>
+                <input id="gptCountInput" type="number" min="1" max="10" value="1">
+              </label>
+              <label class="field">
+                <span>尺寸</span>
+                <select id="gptSizeInput">
+                  <option value="auto">auto</option>
+                  <option value="1024x1024">1024x1024</option>
+                  <option value="1536x1024">1536x1024</option>
+                  <option value="1024x1536">1024x1536</option>
+                </select>
+              </label>
+            </div>
+            <div class="two-col">
+              <label class="field">
+                <span>质量</span>
+                <select id="gptQualityInput">
+                  <option value="auto">auto</option>
+                  <option value="low">low</option>
+                  <option value="medium">medium</option>
+                  <option value="high">high</option>
+                </select>
+              </label>
+              <label class="field">
+                <span>格式</span>
+                <select id="gptFormatInput">
+                  <option value="png">png</option>
+                  <option value="jpeg">jpeg</option>
+                  <option value="webp">webp</option>
+                </select>
+              </label>
+            </div>
+          </div>
+
+          <div class="model-panel is-hidden" id="bananaSettings">
+            <label class="field">
+              <span>模型</span>
+              <select id="bananaModelInput">
+                <option value="gemini-3-pro-image-preview">gemini-3-pro-image-preview</option>
+                <option value="gemini-2.5-flash-image">gemini-2.5-flash-image</option>
+              </select>
+            </label>
+            <div class="two-col">
+              <label class="field">
+                <span>生成张数</span>
+                <input id="bananaCountInput" type="number" min="1" max="10" value="1">
+              </label>
+              <label class="field">
+                <span>比例</span>
+                <select id="bananaRatioInput">
+                  <option value="1:1">1:1</option>
+                  <option value="16:9">16:9</option>
+                  <option value="9:16">9:16</option>
+                  <option value="4:3">4:3</option>
+                  <option value="3:4">3:4</option>
+                  <option value="3:2">3:2</option>
+                  <option value="2:3">2:3</option>
+                  <option value="21:9">21:9</option>
+                </select>
+              </label>
+            </div>
+            <label class="field">
+              <span>清晰度</span>
+              <select id="bananaSizeInput">
+                <option value="">默认</option>
+                <option value="1K">1K</option>
+                <option value="2K">2K</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="model-panel is-hidden" id="officialBananaSettings">
+            <label class="field">
+              <span>官方模型</span>
+              <select id="officialBananaModelInput">
+                <option value="gemini-3.1-flash-image">Nano Banana 2 · gemini-3.1-flash-image</option>
+                <option value="gemini-3.1-flash-lite-image">Nano Banana 2 Lite · gemini-3.1-flash-lite-image</option>
+                <option value="gemini-3-pro-image">Nano Banana Pro · gemini-3-pro-image</option>
+                <option value="gemini-2.5-flash-image">Nano Banana · gemini-2.5-flash-image</option>
+              </select>
+            </label>
+            <div class="two-col">
+              <label class="field">
+                <span>生成张数</span>
+                <input id="officialBananaCountInput" type="number" min="1" max="10" value="1">
+              </label>
+              <label class="field">
+                <span>比例</span>
+                <select id="officialBananaRatioInput">
+                  <option value="1:1">1:1</option>
+                  <option value="16:9">16:9</option>
+                  <option value="9:16">9:16</option>
+                  <option value="4:3">4:3</option>
+                  <option value="3:4">3:4</option>
+                  <option value="3:2">3:2</option>
+                  <option value="2:3">2:3</option>
+                  <option value="4:5">4:5</option>
+                  <option value="5:4">5:4</option>
+                  <option value="21:9">21:9</option>
+                </select>
+              </label>
+            </div>
+            <label class="field">
+              <span>清晰度</span>
+              <select id="officialBananaSizeInput">
+                <option value="">模型默认</option>
+                <option value="512">0.5K（支持的模型）</option>
+                <option value="1K">1K</option>
+                <option value="2K">2K（支持的模型）</option>
+                <option value="4K">4K（支持的模型）</option>
+              </select>
+            </label>
+            <p class="field-help">Lite 仅支持 1K；其他分辨率是否可用取决于所选官方模型。</p>
+          </div>
+        </section>
+
+        <section class="panel-block prompt-block">
+          <h2>提示词</h2>
+          <div class="quick-prompts">
+            <div class="quick-prompt-head">
+              <strong>快速提示词</strong>
+              <button class="text-button" id="newQuickPromptButton" type="button">新建</button>
+            </div>
+            <div class="quick-prompt-list" id="quickPromptList"></div>
+            <div class="quick-prompt-empty" id="quickPromptEmpty">暂无快速提示词</div>
+            <div class="quick-prompt-editor is-hidden" id="quickPromptEditor">
+              <label class="field">
+                <span>标题</span>
+                <input id="quickPromptTitleInput" type="text" placeholder="例如：杯子贴 logo">
+              </label>
+              <label class="field">
+                <span>提示词</span>
+                <textarea id="quickPromptTextInput" rows="5" placeholder="输入常用提示词内容"></textarea>
+              </label>
+              <div class="quick-prompt-actions">
+                <button class="ghost-button" id="saveQuickPromptButton" type="button">保存</button>
+                <button class="ghost-button" id="cancelQuickPromptButton" type="button">取消</button>
+              </div>
+            </div>
+          </div>
+          <textarea id="promptInput" rows="9" placeholder="描述要生成的商品场景、logo 融合方式、画面风格与输出要求。"></textarea>
+        </section>
+
+        <section class="panel-block">
+          <label class="field">
+            <span>并发请求数</span>
+            <input id="concurrencyInput" type="number" min="1" max="8" value="3">
+          </label>
+          <button class="primary-button" id="generateButton" type="button">开始生成</button>
+          <button class="ghost-button full-width" id="cancelButton" type="button" disabled>停止当前批次</button>
+          <p class="notice" id="messageArea" role="status" aria-live="polite">
+            Key 只会用于浏览器直接请求当前所选通道。
+          </p>
+        </section>
+      </aside>
+    </main>
+
+    <template id="pairTemplate">
+      <article class="pair-card">
+        <div class="pair-index"></div>
+        <button class="pair-delete-button" type="button" aria-label="删除这一组">删除组</button>
+        <div class="preview-wrap">
+          <figure>
+            <img class="scene-preview" alt="">
+            <figcaption></figcaption>
+            <div class="pair-image-actions">
+              <button class="text-button replace-scene-button" type="button">更换</button>
+              <button class="text-button remove-scene-button" type="button">删除</button>
+            </div>
+            <input class="visually-hidden replace-scene-input" type="file" accept="image/*">
+          </figure>
+          <figure>
+            <img class="logo-preview" alt="">
+            <figcaption></figcaption>
+            <div class="pair-image-actions">
+              <button class="text-button replace-logo-button" type="button">更换</button>
+              <button class="text-button remove-logo-button" type="button">删除</button>
+            </div>
+            <input class="visually-hidden replace-logo-input" type="file" accept="image/*">
+          </figure>
+        </div>
+      </article>
+    </template>
+
+    <template id="resultTemplate">
+      <article class="result-card">
+        <label class="result-select">
+          <input type="checkbox">
+          <span></span>
+        </label>
+        <div class="result-media"></div>
+        <div class="result-footer">
+          <div>
+            <strong></strong>
+            <small></small>
+          </div>
+          <button type="button">下载</button>
+        </div>
+      </article>
+    </template>
+
+    <div class="preview-modal is-hidden" id="previewModal" role="dialog" aria-modal="true" aria-label="查看大图">
+      <div class="preview-backdrop" data-preview-close></div>
+      <div class="preview-dialog">
+        <header class="preview-head">
+          <div>
+            <strong id="previewTitle">预览</strong>
+            <small id="previewMeta"></small>
+          </div>
+          <button type="button" id="previewCloseButton" aria-label="关闭预览">关闭</button>
+        </header>
+        <div class="preview-stage">
+          <img id="previewImage" alt="">
+        </div>
+      </div>
+    </div>
+
+    <script src="app.js"></script>
+  </body>
+</html>
